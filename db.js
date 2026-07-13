@@ -12,41 +12,44 @@ let sslOption = undefined;
 
 if (process.env.DB_CA_CERT) {
 
-    // Isi sertifikat langsung ditaruh di environment variable
-    // (dipakai saat deploy ke Render, dsb)
     sslOption = {
         ca: process.env.DB_CA_CERT
     };
 
 } else if (process.env.DB_CA_PATH) {
 
-    // Path ke file ca.pem di komputer lokal
     sslOption = {
         ca: fs.readFileSync(path.resolve(process.env.DB_CA_PATH))
     };
 
 } else {
 
-    // Fallback: tetap pakai SSL tapi tidak verifikasi CA
-    // (lebih longgar, cukup untuk development)
     sslOption = {
         rejectUnauthorized: false
     };
 
 }
 
-const db = mysql.createConnection({
+// ==============================
+// Pakai CONNECTION POOL
+// (lebih stabil untuk hosting serverless
+// seperti Leapcell, dibanding koneksi tunggal)
+// ==============================
+const pool = mysql.createPool({
 
     host: process.env.DB_HOST,
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    ssl: sslOption
+    ssl: sslOption,
+    waitForConnections: true,
+    connectionLimit: 5,
+    queueLimit: 0
 
 });
 
-db.connect((err) => {
+pool.getConnection((err, connection) => {
 
     if (err) {
         console.error("MySQL connection error:", err);
@@ -54,7 +57,8 @@ db.connect((err) => {
     }
 
     console.log("MySQL Connected to", process.env.DB_HOST);
+    connection.release();
 
 });
 
-module.exports = db;
+module.exports = pool;
